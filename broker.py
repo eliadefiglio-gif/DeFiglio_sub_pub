@@ -11,7 +11,18 @@ class Broker(threading.Thread):
     def run(self):
         try:
             while True:
-                pass
+                message = self.readLine(self.sock)
+
+                if not message:
+                    break
+
+                command = message.decode("utf-8").strip()
+
+                if command[:2] == 'pub':
+                    pass
+
+                if command[:2] == 'sub':
+                    pass
         except ConnectionError:
             logging.warning("Client disconnected")
         finally:
