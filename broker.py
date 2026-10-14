@@ -9,7 +9,26 @@ class Broker(threading.Thread):
         self.sock = conn
 
     def run(self):
-        pass
+        try:
+            while True:
+                pass
+        except ConnectionError:
+            logging.warning("Client disconnected")
+        finally:
+            self.sock.close()
+            logging.info("Connection to client closed")
+
+    def readLine(self, sk):
+        data = b''
+        while b'\n' not in data:
+            packet = sk.recv(1024)
+            if not packet:
+                return b''
+            data += packet
+
+        line, _ = data.split(b'\n', 1)
+        return line + b'\n'
+
 
 
 def main():
