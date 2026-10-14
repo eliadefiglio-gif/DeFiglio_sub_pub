@@ -4,9 +4,11 @@ import socket
 import logging
 
 class Broker(threading.Thread):
-    def __init__(self, conn):
+    def __init__(self, conn, addr):
         super().__init__()
         self.sock = conn
+        self.addr = addr
+        self.topics = {}
 
     def run(self):
         try:
@@ -22,7 +24,10 @@ class Broker(threading.Thread):
                     pass
 
                 if command[:2] == 'sub':
-                    pass
+                    if command[4:] not in self.topics:
+                        self.topics[command[4:]] = [(self.addr[0], self.addr[1])]
+                    else:
+                        self.topics[command[4:]].append((self.addr[0], self.addr[1]))
         except ConnectionError:
             logging.warning("Client disconnected")
         finally:
@@ -55,7 +60,7 @@ def main():
         while True:
             conn, addr = s.accept()
             logging.info('client connected ip:<' + str(addr) + '>')
-            broker = Broker(conn)
+            broker = Broker(conn, addr)
             broker.daemon = True
             broker.start()
     except KeyboardInterrupt:
