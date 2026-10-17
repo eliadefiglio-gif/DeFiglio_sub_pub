@@ -3,12 +3,22 @@ import threading
 import socket
 import logging
 
+logging.basicConfig(
+        level=logging.DEBUG,
+        format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%H:%M:%S'
+    )
+
 class Broker(threading.Thread):
+
+    topics = {}
+    topics_lock = threading.Lock()
+
     def __init__(self, conn, addr):
         super().__init__()
         self.sock = conn
         self.addr = addr
-        self.topics = {}
+
 
     def run(self):
         try:
@@ -20,17 +30,36 @@ class Broker(threading.Thread):
 
                 command = message.decode("utf-8").strip()
 
-                if command[:2] == 'pub':
+                if command[:3] == 'pub':
                     pass
 
-                if command[:2] == 'sub':
-                    if command[4:] not in self.topics:
-                        self.topics[command[4:]] = [(self.addr[0], self.addr[1])]
-                    else:
-                        self.topics[command[4:]].append((self.addr[0], self.addr[1]))
+                if command[:3] == 'sub':
+                    topic_name = command[4:].strip()
+                    client_address = (self.addr[0], self.addr[1])
+
+                    with self.topics_lock:
+                        if topic_name not in self.topics:
+                            self.topics[topic_name] = [client_address]
+                            logging.debug(f"Created new topic '{topic_name}' from {client_address}")
+                        else:
+                            if client_address not in self.topics[topic_name]:
+                                self.topics[topic_name].append(client_address)
+                                logging.debug(f"Client {client_address} added to topic '{topic_name}'")
+                        self.sock.sendall("OK\n".encode())
+
         except ConnectionError:
             logging.warning("Client disconnected")
         finally:
+            client_identity = (self.addr[0], self.addr[1])
+
+            with self.topics_lock:
+                for topic in list(self.topics):
+                    if client_identity in self.topics[topic]:
+                        logging.info(f"Client {client_identity} removed from topic '{topic}'")
+                        self.topics[topic].remove(client_identity)
+                    if not self.topics[topic]:
+                        del self.topics[topic]
+
             self.sock.close()
             logging.info("Connection to client closed")
 
