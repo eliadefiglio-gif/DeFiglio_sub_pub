@@ -23,7 +23,7 @@ def main():
         sock.connect((host, port))
 
         sock.sendall(f'sub:{args.topic}\n'.encode())
-        logging.info(f"Sent 'sub:{args.topic}\n' to broker {args.broker_ip}")
+        logging.info(f"Sent 'sub:{args.topic}' to broker {args.broker_ip}")
         data = b''
         while b'\n' not in data:
             data += sock.recv(1024)

@@ -31,37 +31,54 @@ class Broker(threading.Thread):
                 command = message.decode("utf-8").strip()
 
                 if command[:3] == 'pub':
-                    pass
+                    parts = command.split(':', 2)
+
+                    if len(parts) == 3:
+                        topic_name = parts[1].strip()
+                        message = parts[2]
+
+                    if topic_name in self.topics:
+                        self.sock.sendall("OK\n".encode("utf-8"))
+                        with self.topics_lock:
+                            for client_sock in self.topics[topic_name]:
+                                try:
+                                    client_sock.sendall(f"{message}\n".encode("utf-8"))
+                                    logging.info(f"Published message to '{topic_name}'")
+                                    logging.info(f"Message received by {self.addr}")
+                                except ConnectionRefusedError:
+                                    logging.warning(f"Connection refused from {self.addr}")
+                                except Exception as e:
+                                    logging.error(e)
+                    else:
+                        self.sock.sendall("NOTFOUND\n".encode("utf-8"))
 
                 if command[:3] == 'sub':
                     topic_name = command[4:].strip()
-                    client_address = (self.addr[0], self.addr[1])
 
                     with self.topics_lock:
                         if topic_name not in self.topics:
-                            self.topics[topic_name] = [client_address]
-                            logging.debug(f"Created new topic '{topic_name}' from {client_address}")
+                            self.topics[topic_name] = [self.sock]
+                            logging.debug(f"Created new topic '{topic_name}' from {self.addr}")
                         else:
-                            if client_address not in self.topics[topic_name]:
-                                self.topics[topic_name].append(client_address)
-                                logging.debug(f"Client {client_address} added to topic '{topic_name}'")
+                            if self.sock not in self.topics[topic_name]:
+                                self.topics[topic_name].append(self.sock)
+                                logging.debug(f"Client {self.addr} added to topic '{topic_name}'")
                         self.sock.sendall("OK\n".encode())
 
         except ConnectionError:
-            logging.warning("Client disconnected")
+            logging.warning(f"Client {self.addr} disconnected")
         finally:
-            client_identity = (self.addr[0], self.addr[1])
 
             with self.topics_lock:
                 for topic in list(self.topics):
-                    if client_identity in self.topics[topic]:
-                        logging.info(f"Client {client_identity} removed from topic '{topic}'")
-                        self.topics[topic].remove(client_identity)
+                    if self.sock in self.topics[topic]:
+                        logging.info(f"Client {self.addr} removed from topic '{topic}'")
+                        self.topics[topic].remove(self.sock)
                     if not self.topics[topic]:
                         del self.topics[topic]
 
             self.sock.close()
-            logging.info("Connection to client closed")
+            logging.info(f"Connection to client {self.addr} closed")
 
     def readLine(self, sk):
         data = b''
@@ -88,7 +105,7 @@ def main():
     try:
         while True:
             conn, addr = s.accept()
-            logging.info('client connected ip:<' + str(addr) + '>')
+            logging.info(f'Broker connected to {addr}')
             broker = Broker(conn, addr)
             broker.daemon = True
             broker.start()
